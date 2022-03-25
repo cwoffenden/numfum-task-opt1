@@ -9,9 +9,9 @@
  */
 #ifndef ALIGNED_VAR
 #ifdef _MSC_VER
-#define ALIGNED_VAR(n, type) __declspec(align(n)) type
+#define ALIGNED_VAR(type, n) __declspec(align(n)) type
 #else
-#define ALIGNED_TYPE(n, type) type __attribute__((aligned(n)))
+#define ALIGNED_VAR(type, n) type __attribute__((aligned(n)))
 #endif
 #endif
 

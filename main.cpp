@@ -66,13 +66,12 @@ static void create_etc1_to_dxt1_6_conversion_table() {
 	etc1_to_dxt1_56_solution* dst = result;
 	/*
 	 * First pre-calculate the endpoint colours. There are 4096 choices (for a
-	 * 6-bit endpoint) and this was recalculated 15360 times in the original
-	 * implementation (intensities * greens * ranges * mappings). We're really
-	 * only extracting the inner loop, resulting in an approx. 30% improvement
-	 * on the original, but this becomes more important as more optimisations
-	 * are added.
+	 * 6-bit endpoint) and the calculations were run 15360 times in the original
+	 * implementation (intensities * greens * ranges * mappings). This alone on
+	 * an M1 results in a 2.6x speed-up (158ms to 59ms); on a Xeon this wasn't
+	 * so impressive, resulting in only a 30% improvement.
 	 */
-	ALIGNED_VAR(16, uint32_t) colorTable[(1 << Bits) * (1 << Bits)][4];
+    ALIGNED_VAR(uint32_t, 16) colorTable[(1 << Bits) * (1 << Bits)][4];
 	uint32_t (*entry)[4] = colorTable;
 	for (uint32_t hi = 0; hi < (1 << Bits); hi++) {
 		uint32_t hi8 = (hi << (8 - Bits)) | (hi >> (Bits - (8 - Bits)));
@@ -194,7 +193,7 @@ typedef void (*timed) ();
 /**
  * Run the passed function and display the quickest of the runs.
  */
-void bestRun(timed func, const char* name = nullptr) {
+void bestRun(timed func, const char* name) {
 	// Before we time it we verify the results are correct
 	func();
 	if (!verifyTable(result, known)) {

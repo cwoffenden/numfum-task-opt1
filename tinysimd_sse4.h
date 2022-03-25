@@ -1,6 +1,5 @@
 #pragma once
 
-#include <stdint.h>
 #include <immintrin.h>
 
 typedef __m128i ts_int32x4;
