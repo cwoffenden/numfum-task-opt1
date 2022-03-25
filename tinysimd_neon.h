@@ -2,6 +2,10 @@
 
 #include <arm_neon.h>
 
+#ifndef ADD_SIMD_TARGET
+#define ADD_SIMD_TARGET
+#endif
+
 typedef int32x4_t ts_int32x4;
 
 /*

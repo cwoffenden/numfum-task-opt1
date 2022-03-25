@@ -215,6 +215,7 @@ void bestRun(timed func, const char* name) {
 /**
  * Tests the generation and benchmarks it.
  */
+ADD_SIMD_TARGET
 int main(int /*argc*/, char* /*argv*/[]) {
 	ts_int32x4 val = ts_init_i32(1, 2, 3, 4);
 

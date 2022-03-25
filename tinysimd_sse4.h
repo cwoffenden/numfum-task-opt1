@@ -2,6 +2,14 @@
 
 #include <immintrin.h>
 
+#ifndef ADD_SIMD_TARGET
+#if defined(__GNUC__) || defined(__llvm__)
+#define ADD_SIMD_TARGET __attribute__((target("sse4.1")))
+#else
+#define ADD_SIMD_TARGET
+#endif
+#endif
+
 typedef __m128i ts_int32x4;
 
 // SSE2
