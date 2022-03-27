@@ -8,5 +8,4 @@ a.out
 
 .vs/
 out/
-
-cmake_install.cmake
+build/

@@ -18,6 +18,11 @@ typedef __m128i ts_int32x4;
 // SSE2
 #define ts_init_i32(a, b, c, d) _mm_set_epi32(d, c, b, a)
 
+// SSE4.1
+#define ts_lane_u32(v, n) _mm_extract_epi32(v, n)
+
+// arithmetic
+
 // SSE2
 #define ts_add_i32(a, b) _mm_add_epi32(a, b)
 
@@ -35,11 +40,23 @@ static inline int32_t ts_hadd_i32(ts_int32x4 val) {
 	return (int32_t) _mm_cvtsi128_si32(val);
 }
 
+// logical
+
+// SSE2
+static inline ts_int32x4 ts_not_u32(ts_int32x4 val) {
+	return _mm_xor_si128(val, _mm_cmpeq_epi32(val, val));
+}
+
 // SSE2
 #define ts_and_u32(a, b) _mm_and_si128(a, b)
 
 // SSE2
 #define ts_or_u32(a, b) _mm_or_si128(a, b)
+
+// SSE2
+#define ts_xor_u32(a, b) _mm_xor_si128(a, b)
+
+// shuffles
 
 // SSSE3
 #define ts_shuffle_u8(a, b) _mm_shuffle_epi8(a, b)

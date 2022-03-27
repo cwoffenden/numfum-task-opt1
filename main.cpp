@@ -66,10 +66,10 @@ static void create_etc1_to_dxt1_6_conversion_table() {
 	etc1_to_dxt1_56_solution* dst = result;
 	/*
 	 * First pre-calculate the endpoint colours. There are 4096 choices (for a
-	 * 6-bit endpoint) and the calculations were run 15360 times in the original
-	 * implementation (intensities * greens * ranges * mappings). This alone on
-	 * an M1 results in a 2.6x speed-up (158ms to 59ms); on a Xeon this wasn't
-	 * so impressive, resulting in only a 30% improvement.
+	 * 6-bit endpoint) and these same calculations were run 15360 times in the
+	 * original implementation (intensities * greens * ranges * mappings). This
+	 * alone on an M1 results in a 2.6x speed-up (158ms to 59ms); on a Xeon this
+	 * isn't so impressive, resulting in only a 30% improvement.
 	 */
     ALIGNED_VAR(uint32_t, 16) colorTable[(1 << Bits) * (1 << Bits)][4];
 	uint32_t (*entry)[4] = colorTable;
@@ -193,7 +193,7 @@ typedef void (*timed) ();
 /**
  * Run the passed function and display the quickest of the runs.
  */
-void bestRun(timed func, const char* name) {
+static void bestRun(timed func, const char* name) {
 	// Before we time it we verify the results are correct
 	func();
 	if (!verifyTable(result, known)) {
@@ -212,19 +212,44 @@ void bestRun(timed func, const char* name) {
 	printf("Best run took %dms (%s)\n", best, (name) ? name : "default");
 }
 
+void runTests() {
+	bestRun(create_etc1_to_dxt1_6_conversion_table_original, "original");
+	bestRun(create_etc1_to_dxt1_6_conversion_table<6>,       "optimised");
+}
+
+ADD_SIMD_TARGET
+void printInt32x4(ts_int32x4 v) {
+	printf("0: %08X, 1: %08X, 2: %08X, 3: %08X\n",
+		ts_lane_u32(v, 0),
+		ts_lane_u32(v, 1),
+		ts_lane_u32(v, 2),
+		ts_lane_u32(v, 3));
+}
+
 /**
  * Tests the generation and benchmarks it.
  */
 ADD_SIMD_TARGET
 int main(int /*argc*/, char* /*argv*/[]) {
-	ts_int32x4 val = ts_init_i32(1, 2, 3, 4);
+	ts_int32x4 op1, op2;
+	
+	op1 = ts_init_i32(1, 2, 3, 4);
+	op1 = ts_mul_i32(op1, op1); // 1, 4, 9, 16
 
-	val = ts_mul_i32(val, val); // 1, 4, 9, 16
-
-	int result = ts_hadd_i32(val); // 30
-
-	bestRun(create_etc1_to_dxt1_6_conversion_table_original, "original");
-	bestRun(create_etc1_to_dxt1_6_conversion_table<6>, "optimised");
-    
+	int result = ts_hadd_i32(op1); // 30
+	
+	uint32_t const shuffle[5] = {
+		0x03020100, //  3,  2,  1,  0
+		0x07060504, //  7,  6,  5,  4
+		0x0B0A0908, // 11, 10,  9,  8
+		0x0F0E0D0C, // 15, 14, 13, 12
+		0xFFFFFFFF, // -1, -1, -1, -1 (fulfilling bit-7 on SSE and OOB on Neon)
+	};
+	
+	op1 = ts_init_i32(0x33221100, 0x77665544, 0xBBAA9988, 0xFFEEDDCC);
+	op2 = ts_init_i32(shuffle[3], shuffle[4], shuffle[1], shuffle[0]);
+	printInt32x4(op1);
+	op1 = ts_shuffle_u8(op1, op2);
+	printInt32x4(op1);
     return 0;
 }
