@@ -226,17 +226,25 @@ void printInt32x4(ts_int32x4 v) {
 		ts_lane_u32(v, 3));
 }
 
+void printInt(int i) {
+	printf("i: %08X (%d)\n", i, i);
+}
+
 /**
  * Tests the generation and benchmarks it.
  */
 ADD_SIMD_TARGET
 int main(int /*argc*/, char* /*argv*/[]) {
 	ts_int32x4 op1, op2;
+	int res;
 	
 	op1 = ts_init_i32(1, 2, 3, 4);
-	op1 = ts_mul_i32(op1, op1); // 1, 4, 9, 16
+	printInt32x4(op1);
+	op1 = ts_mul_i32(op1, op1);
+	printInt32x4(op1); // 1, 4, 9, 16
 
-	int result = ts_hadd_i32(op1); // 30
+	res = ts_hadd_i32(op1);
+	printInt(res); // 30
 	
 	uint32_t const shuffle[5] = {
 		0x03020100, //  3,  2,  1,  0

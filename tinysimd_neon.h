@@ -34,6 +34,8 @@ typedef int32x4_t ts_int32x4;
 #endif
 #endif
 
+ // load/store
+
 #define ts_load_i32(addr) vld1q_s32(addr)
 
 #define ts_init_i32(a, b, c, d) (ts_int32x4) _init_i32(a, b, c, d)
