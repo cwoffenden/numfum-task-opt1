@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 /**
  * \def ALIGNED_VAR
  * Aligned variable declaration.
@@ -27,7 +29,11 @@
 #if defined(__wasm_simd128__)
 #include "tinysimd_wasm.h"
 #else
+#if defined(__VSX__) || defined(__ALTIVEC__) || defined(__APPLE_ALTIVEC__)
+#include "tinysimd_vsx.h"
+#else
 // include scalar fallback
+#endif
 #endif
 #endif
 #endif

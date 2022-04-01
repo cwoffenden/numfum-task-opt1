@@ -236,16 +236,16 @@ void printInt(int i) {
 ADD_SIMD_TARGET
 int main(int /*argc*/, char* /*argv*/[]) {
 	ts_int32x4 op1, op2;
-	int res;
+	int res; (void) res;
 	
 	op1 = ts_init_i32(1, 2, 3, 4);
 	printInt32x4(op1);
-	op1 = ts_mul_i32(op1, op1);
-	printInt32x4(op1); // 1, 4, 9, 16
+	op2 = ts_mul_i32(op1, op1);
+	printInt32x4(op2); // 1, 4, 9, 16
 
-	res = ts_hadd_i32(op1);
+	res = ts_hadd_i32(op2);
 	printInt(res); // 30
-	
+
 	uint32_t const shuffle[5] = {
 		0x03020100, //  3,  2,  1,  0
 		0x07060504, //  7,  6,  5,  4
@@ -259,5 +259,6 @@ int main(int /*argc*/, char* /*argv*/[]) {
 	printInt32x4(op1);
 	op1 = ts_shuffle_u8(op1, op2);
 	printInt32x4(op1);
-    return 0;
+
+	return 0;
 }
