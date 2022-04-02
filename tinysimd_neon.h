@@ -8,7 +8,7 @@
 
 typedef int32x4_t ts_int32x4;
 
-/*
+/**
  * \def _init_i32
  * Helper to initialise either a \c int32x4_t or \c uint32x4_t (with no checks
  * performed on the content, so depending on the warning level out-of-bounds

@@ -43,7 +43,7 @@ static inline int32_t ts_lane_u32(ts_int32x4 v, unsigned n) {
 
 static inline int32_t ts_hadd_i32(ts_int32x4 val) {
 	/*
-	 * This is six instructions but on Power8 at least the lane extract is a
+	 * This is six instructions, but on Power8 at least the lane extract is a
 	 * 'mfvsrwz' vector to scalar register, rather than to memory.
 	 */
 	return ts_lane_u32(vec_sums(val, vec_splat_s32(0)), 3);
@@ -64,4 +64,3 @@ static inline ts_int32x4 ts_not_u32(ts_int32x4 val) {
 // shuffles
 
 #define ts_shuffle_u8(a, b) vec_perm(a, vec_splat_s32(0), (__vector unsigned char) b)
-
