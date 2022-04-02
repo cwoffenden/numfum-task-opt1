@@ -10,7 +10,7 @@ typedef __vector int ts_int32x4;
 
  // load/store
 
-#define ts_load_i32(addr) vec_ld(0, (ts_int32x4*) addr)
+#define ts_load_i32(addr) vec_ld(0, (int32_t*) addr)
 
 #define ts_init_i32(a, b, c, d) (ts_int32x4) {(int32_t) a, (int32_t) b, (int32_t) c, (int32_t) d}
 

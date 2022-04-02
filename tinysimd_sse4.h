@@ -15,7 +15,7 @@ typedef __m128i ts_int32x4;
 // load/store
 
 // SSE2
-#define ts_load_i32(addr) _mm_load_si128(addr)
+#define ts_load_i32(addr) _mm_load_si128((int32_t*) addr)
 
 // SSE2
 #define ts_init_i32(a, b, c, d) _mm_set_epi32(d, c, b, a)

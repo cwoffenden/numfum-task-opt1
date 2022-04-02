@@ -14,7 +14,7 @@ typedef __i32x4 ts_int32x4;
 
 // load/store
 
-#define ts_load_i32(addr) wasm_v128_load(addr)
+#define ts_load_i32(addr) wasm_v128_load((int32_t*) addr)
 
 #define ts_init_i32(a, b, c, d) wasm_i32x4_make(a, b, c, d)
 
