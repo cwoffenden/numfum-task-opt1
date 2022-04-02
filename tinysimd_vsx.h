@@ -2,6 +2,17 @@
 
 #include <altivec.h>
 
+/*
+ * To solve: disable 'Java mode' in the Vector Status and Control Register (set
+ * VSCR[NJ] = 1) and allow it to be restored afterwards. E.g. grab vec_mfvscr(),
+ * save it for restoring later, set the NJ bit, then update with vec_mtvscr().
+ * It's a vector of unsigned shorts, with elements 7 & 8 containing the register
+ * values.
+ *
+ * I *think* this is the right thing since Neon doesn't support denormal or NaN
+ * inputs or results, and this would make VSX behave the same.
+ */
+
 #ifndef ADD_SIMD_TARGET
 #define ADD_SIMD_TARGET
 #endif
