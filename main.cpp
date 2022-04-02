@@ -242,11 +242,28 @@ int main(int /*argc*/, char* /*argv*/[]) {
 	printInt32x4(op1);
 	op2 = ts_mul_i32(op1, op1);
 	printInt32x4(op2); // 1, 4, 9, 16
+	
+	op2 = ts_add_i32(op1, op2);
+	printInt32x4(op2); // 2, 6, 12, 20
+	
+	op2 = ts_sub_i32(op2, op1);
+	printInt32x4(op2); // 1, 4, 9, 16
 
 	res = ts_hadd_i32(op2);
 	printInt(res); // 30
+	
+	ALIGNED_VAR(int32_t, 16) mask[4] = {
+		0xFFFFFFFF,
+		0x00000000,
+		0xFFFFFFFF,
+		0x00000000,
+	};
+	op1 = ts_load_i32(mask);
+	printInt32x4(op1);
+	op2 = ts_and_u32(op1, op2);
+	printInt32x4(op2);
 
-	uint32_t const shuffle[5] = {
+	int32_t const shuffle[5] = {
 		0x03020100, //  3,  2,  1,  0
 		0x07060504, //  7,  6,  5,  4
 		0x0B0A0908, // 11, 10,  9,  8
