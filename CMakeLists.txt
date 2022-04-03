@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.0)
 
 project(task-opt1)
 
+# TODO: LTO should be set with INTERPROCEDURAL_OPTIMIZATION (CMake 3.9)
+#
+# https://cmake.org/cmake/help/latest/policy/CMP0069.html#policy:CMP0069
+
 if (MSVC)
 	# We build Relase with the /MD (DLL) option instead of CMake's default /MT (static runtime)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W3 /wd4576 /D_HAS_EXCEPTIONS=0 /GR- /MP")
@@ -26,3 +30,5 @@ source_group("Headers" FILES ${INCS})
 source_group("Sources" FILES ${SRCS})
 
 add_executable(task-opt1 ${SRCS} ${INCS})
+
+set_property(TARGET task-opt1 PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)

@@ -65,6 +65,9 @@ static etc1_to_dxt1_56_solution result[32 * 8 * NUM_ETC1_TO_DXT1_SELECTOR_MAPPIN
  * Note: the original code has two very similar functions to generate the 5- and
  * 6-bit tables, so in the design process this was also optimised into a
  * template function instead.
+ *
+ * TODO: hmm, something's not right, ARM can get to 59ms with just the colour table, so why is this only reaching 41ms
+ * TODO: removing the table and calculating per loop means the Neon SIMD implementation is slower than scalar with a table (86ms)
  */
 template<unsigned Bits>
 static void create_etc1_to_dxt1_6_conversion_table() {
