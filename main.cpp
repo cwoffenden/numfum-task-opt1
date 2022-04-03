@@ -151,6 +151,8 @@ static void create_etc1_to_dxt1_6_conversion_table() {
 			 * cut-down get_diff_subblock_colors/pack_color5). 'allColors'
 			 * holds the original calculated block green channels which are
 			 * later masked out and variations made.
+			 * 
+			 * TODO: go on, take out the calls, you'll sleep better
 			 */
 			color32 block_colors[4];
 			decoder_etc_block::get_diff_subblock_colors(block_colors, decoder_etc_block::pack_color5(color32(g, g, g, 255), false), inten);
