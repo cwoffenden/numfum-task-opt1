@@ -61,68 +61,153 @@ static bool verifyTable(const etc1_to_dxt1_56_solution* a, const etc1_to_dxt1_56
  */
 static etc1_to_dxt1_56_solution result[32 * 8 * NUM_ETC1_TO_DXT1_SELECTOR_MAPPINGS * NUM_ETC1_TO_DXT1_SELECTOR_RANGES];
 
-template<unsigned Bits>
+/*
+ * Note: the original code has two very similar functions to generate the 5- and
+ * 6-bit tables, so in the design process this was also optimised into a
+ * template function instead.
+ */
+template<unsigned Bits = 6>
 static void create_etc1_to_dxt1_6_conversion_table() {
 	etc1_to_dxt1_56_solution* dst = result;
 	/*
-	 * First pre-calculate the endpoint colours. There are 4096 choices (for a
-	 * 6-bit endpoint) and these same calculations were run 15360 times in the
+	 * Easy first choice: Pre-calculate the endpoint colours. There are 4096
+	 * (for a 6-bit endpoint) and these same calculations were run 15360x in the
 	 * original implementation (intensities * greens * ranges * mappings). This
 	 * alone on an M1 results in a 2.6x speed-up (158ms to 59ms); on a Xeon this
 	 * isn't so impressive, resulting in only a 30% improvement.
+	 * 
+	 * TODO: aligned malloc this, instead of putting 16kB on the stack (so vec_malloc(), _mm_malloc(), _aligned_malloc(), aligned_alloc(), posix_memalign(), etc.)
 	 */
-    ALIGNED_VAR(uint32_t, 16) colorTable[(1 << Bits) * (1 << Bits)][4];
-	uint32_t (*entry)[4] = colorTable;
+	ALIGNED_VAR(uint32_t, 16) colorTable[(1 << Bits) * (1 << Bits)][4];
+	uint32_t (*nextFour)[4] = colorTable;
 	for (uint32_t hi = 0; hi < (1 << Bits); hi++) {
 		uint32_t hi8 = (hi << (8 - Bits)) | (hi >> (Bits - (8 - Bits)));
 		for (uint32_t lo = 0; lo < (1 << Bits); lo++) {
 			int32_t lo8 = (lo << (8 - Bits)) | (lo >> (Bits - (8 - Bits)));
-			(*entry)[0] =  lo8;
-			(*entry)[1] = (lo8 * 2 + hi8) / 3;
-			(*entry)[2] = (hi8 * 2 + lo8) / 3;
-			(*entry)[3] =  hi8;
-			entry++;
+			(*nextFour)[0] =  lo8;
+			(*nextFour)[1] = (lo8 * 2 + hi8) / 3;
+			(*nextFour)[2] = (hi8 * 2 + lo8) / 3;
+			(*nextFour)[3] =  hi8;
+			nextFour++;
 		}
 	}
+	/*
+	 * This is questionable whether it's worth extracting, since using a mask to
+	 * implement the selector ranges, then a shuffle for the mapping, is the
+	 * real improvement (since we remove a bunch of loops and reads) but since
+	 * we're changing how this is done we might as well cache the results.
+	 */
+	ALIGNED_VAR(uint32_t, 16) rangeTable[NUM_ETC1_TO_DXT1_SELECTOR_RANGES][4] = {};
+	nextFour = rangeTable;
+	for (uint32_t sr = 0; sr < NUM_ETC1_TO_DXT1_SELECTOR_RANGES; sr++) {
+		const uint32_t low_selector  = g_etc1_to_dxt1_selector_ranges[sr].m_low;
+		const uint32_t high_selector = g_etc1_to_dxt1_selector_ranges[sr].m_high;
+		for (uint32_t s = low_selector; s <= high_selector; s++) {
+			(*nextFour)[s] = 0xFFFFFFFF;
+		}
+		nextFour++;
+	}
+	/*
+	 * We use these shuffle values to move whole ints, more of which below,
+	 * except the last which zeroes the destination (-1 fulfils bit-7 on SSE
+	 * and OOB on Neon, Wasm and VSX). The 8-bit shuffle is overkill, and the
+	 * equivalent of SSE2's _mm_shuffle_epi32() would be preferred, but it takes
+	 * immediate values, so we'd need to specify them at compile time (or use a
+	 * switch).
+	 */
+	uint32_t const shuffle8[5] = {
+		0x03020100, //  3,  2,  1,  0
+		0x07060504, //  7,  6,  5,  4
+		0x0B0A0908, // 11, 10,  9,  8
+		0x0F0E0D0C, // 15, 14, 13, 12
+		0xFFFFFFFF, // -1, -1, -1, -1
+	};
+	/*
+	 * With the above shuffles we create another table to move colour table
+	 * entries on the selector mappings. Combined with 'rangeMask' this now
+	 * fully eliminates the very expensive colour error calculation loop.
+	 */
+	ALIGNED_VAR(uint32_t, 16) mappingTable[NUM_ETC1_TO_DXT1_SELECTOR_MAPPINGS][4];
+	nextFour = mappingTable;
+	for (uint32_t m = 0; m < NUM_ETC1_TO_DXT1_SELECTOR_MAPPINGS; m++) {
+		const uint8_t* selectorMapping = g_etc1_to_dxt1_selector_mappings[m];
+		(*nextFour)[0] = shuffle8[selectorMapping[0]];
+		(*nextFour)[1] = shuffle8[selectorMapping[1]];
+		(*nextFour)[2] = shuffle8[selectorMapping[2]];
+		(*nextFour)[3] = shuffle8[selectorMapping[3]];
+		nextFour++;
+	}
+	/*
+	 * Calculations start here. The colour table is a good start but the main
+	 * aim is to remove branches. Taking this tables above most of the inner
+	 * loop finding the lowest error can be reduced to one branch.
+	 */
 	for (int inten = 0; inten < 8; inten++) {
 		for (uint32_t g = 0; g < 32; g++) {
+			/*
+			 * We *could* optimise this, since it's extra work for just the
+			 * green channel, which then need repacking manually into a vector.
+			 * But it only runs 256x so it's not worth the effort (of writing a
+			 * cut-down get_diff_subblock_colors/pack_color5). 'allColors'
+			 * holds the original calculated block green channels which are
+			 * later masked out and variations made.
+			 */
 			color32 block_colors[4];
 			decoder_etc_block::get_diff_subblock_colors(block_colors, decoder_etc_block::pack_color5(color32(g, g, g, 255), false), inten);
-
+			ts_int32x4 const allColors = ts_init_i32(block_colors[0].g, block_colors[1].g, block_colors[2].g, block_colors[3].g);
 			for (uint32_t sr = 0; sr < NUM_ETC1_TO_DXT1_SELECTOR_RANGES; sr++) {
-				const uint32_t low_selector = g_etc1_to_dxt1_selector_ranges[sr].m_low;
-				const uint32_t high_selector = g_etc1_to_dxt1_selector_ranges[sr].m_high;
-
+				/*
+				 * We get the pre-calculated range mask and apply it to the
+				 * block. Afterwards the inverted mask is prepared (see below).
+				 */
+				ts_int32x4 rangeMask = ts_load_i32(rangeTable[sr]);
+				ts_int32x4 const usedColors = ts_and_u32(allColors, rangeMask);
+				rangeMask = ts_not_u32(rangeMask);
 				for (uint32_t m = 0; m < NUM_ETC1_TO_DXT1_SELECTOR_MAPPINGS; m++) {
-					const uint8_t* mapping = g_etc1_to_dxt1_selector_mappings[m];
+					/*
+					 * The mapping table knows the shuffles but needs the range
+					 * also applying to zero-out unwanted entries. OR'ing the
+					 * inverted range will set these entries to -1, which being
+					 * OOB will zero them out when shuffling.
+					 */
+					ts_int32x4 const mapping = ts_or_u32(ts_load_i32(mappingTable[m]), rangeMask);
 					uint32_t best_lo = 0;
 					uint32_t best_hi = 0;
 					uint32_t best_err = UINT32_MAX;
-					uint32_t(*next)[4] = colorTable;
+					nextFour = colorTable;
 					for (uint32_t hi = 0; hi < (1 << Bits); hi++) {
 						for (uint32_t lo = 0; lo < (1 << Bits); lo++) {
-							uint32_t total_err = 0;
-
-							for (uint32_t s = low_selector; s <= high_selector; s++) {
-								int err = block_colors[s].g - (*next)[mapping[s]];
-
-								total_err += err * err;
-							}
-
+							// get the next four precalculated interpolated entries
+							ts_int32x4 accum = ts_load_i32(nextFour++);
+							// arrange the entries into g_etc1_to_dxt1_selector_mappings order
+							accum = ts_shuffle_u8(accum, mapping);
+							// calculate the (signed) error differences from the pre-masked used colours
+							accum = ts_sub_i32(accum, usedColors);
+							// square the errors
+							accum = ts_mul_i32(accum, accum);
+							// sum all the errors (recalling we've already masked out unused entries)
+							uint32_t total_err = ts_hadd_i32(accum);
+							// TODO: hint that this is the branch least taken
 							if (total_err < best_err) {
 								best_err = total_err;
 								best_lo = lo;
 								best_hi = hi;
-								//if (best_err == 0) {
-								//	goto outer;
-								//}
+								/*
+								 * If we take an early-out here once we've hit
+								 * zero the scalar implementation can see a 20%
+								 * improvement, but with the SIMD version not
+								 * so, it's a 10% penalty.
+								 *
+								if (best_err == 0) {
+									goto outer;
+								}
+								 */
 							}
-							next++;
 						}
 					}
 				//outer:
 					assert(best_err <= 0xFFFF);
-					*dst++ = (etc1_to_dxt1_56_solution){ (uint8_t)best_lo, (uint8_t)best_hi, (uint16_t)best_err };
+					*dst++ = (etc1_to_dxt1_56_solution) { (uint8_t) best_lo, (uint8_t) best_hi, (uint16_t) best_err };
 				} // m
 			} // sr
 		} // g
@@ -233,49 +318,7 @@ void printInt(int i) {
 /**
  * Tests the generation and benchmarks it.
  */
-ADD_SIMD_TARGET
 int main(int /*argc*/, char* /*argv*/[]) {
-	ts_int32x4 op1, op2;
-	int res; (void) res;
-	
-	op1 = ts_init_i32(1, 2, 3, 4);
-	printInt32x4(op1);
-	op2 = ts_mul_i32(op1, op1);
-	printInt32x4(op2); // 1, 4, 9, 16
-	
-	op2 = ts_add_i32(op1, op2);
-	printInt32x4(op2); // 2, 6, 12, 20
-	
-	op2 = ts_sub_i32(op2, op1);
-	printInt32x4(op2); // 1, 4, 9, 16
-
-	res = ts_hadd_i32(op2);
-	printInt(res); // 30
-	
-	ALIGNED_VAR(uint32_t, 16) mask[4] = {
-		0xFFFFFFFF,
-		0x00000000,
-		0xFFFFFFFF,
-		0x00000000,
-	};
-	op1 = ts_load_i32(mask);
-	printInt32x4(op1);
-	op2 = ts_and_u32(op1, op2);
-	printInt32x4(op2);
-
-	uint32_t const shuffle[5] = {
-		0x03020100, //  3,  2,  1,  0
-		0x07060504, //  7,  6,  5,  4
-		0x0B0A0908, // 11, 10,  9,  8
-		0x0F0E0D0C, // 15, 14, 13, 12
-		0xFFFFFFFF, // -1, -1, -1, -1 (fulfilling bit-7 on SSE and OOB on Neon)
-	};
-	
-	op1 = ts_init_i32(0x33221100, 0x77665544, 0xBBAA9988, 0xFFEEDDCC);
-	op2 = ts_init_i32(shuffle[3], shuffle[4], shuffle[1], shuffle[0]);
-	printInt32x4(op1);
-	op1 = ts_shuffle_u8(op1, op2);
-	printInt32x4(op1);
-
+	runTests();
 	return 0;
 }
