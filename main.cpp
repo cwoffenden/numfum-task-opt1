@@ -66,7 +66,7 @@ static etc1_to_dxt1_56_solution result[32 * 8 * NUM_ETC1_TO_DXT1_SELECTOR_MAPPIN
  * 6-bit tables, so in the design process this was also optimised into a
  * template function instead.
  */
-template<unsigned Bits = 6>
+template<unsigned Bits>
 static void create_etc1_to_dxt1_6_conversion_table() {
 	etc1_to_dxt1_56_solution* dst = result;
 	/*
@@ -194,18 +194,17 @@ static void create_etc1_to_dxt1_6_conversion_table() {
 								best_hi = hi;
 								/*
 								 * If we take an early-out here once we've hit
-								 * zero the scalar implementation can see a 20%
-								 * improvement, but with the SIMD version not
-								 * so, it's a 10% penalty.
-								 *
+								 * zero some implementations will get worse,
+								 * some better. Arm improves 20%, Intel gets
+								 * worse by 10%.
+								 */
 								if (best_err == 0) {
 									goto outer;
 								}
-								 */
 							}
 						}
 					}
-				//outer:
+				outer:
 					assert(best_err <= 0xFFFF);
 					*dst++ = (etc1_to_dxt1_56_solution) { (uint8_t) best_lo, (uint8_t) best_hi, (uint16_t) best_err };
 				} // m
