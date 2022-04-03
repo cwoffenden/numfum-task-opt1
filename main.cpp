@@ -178,7 +178,7 @@ static void create_etc1_to_dxt1_6_conversion_table() {
 					for (uint32_t hi = 0; hi < (1 << Bits); hi++) {
 						for (uint32_t lo = 0; lo < (1 << Bits); lo++) {
 							// get the next four precalculated interpolated entries
-							ts_int32x4 accum = ts_load_i32(nextFour++);
+							ts_int32x4 accum = ts_load_i32(nextFour);
 							// arrange the entries into g_etc1_to_dxt1_selector_mappings order
 							accum = ts_shuffle_u8(accum, mapping);
 							// calculate the (signed) error differences from the pre-masked used colours
@@ -202,6 +202,7 @@ static void create_etc1_to_dxt1_6_conversion_table() {
 									goto outer;
 								}
 							}
+							nextFour++;
 						}
 					}
 				outer:
