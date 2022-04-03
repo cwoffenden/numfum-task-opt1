@@ -30,5 +30,3 @@ source_group("Headers" FILES ${INCS})
 source_group("Sources" FILES ${SRCS})
 
 add_executable(task-opt1 ${SRCS} ${INCS})
-
-set_property(TARGET task-opt1 PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
