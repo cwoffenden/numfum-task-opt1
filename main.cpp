@@ -63,14 +63,14 @@ static etc1_to_dxt1_56_solution result[32 * 8 * NUM_ETC1_TO_DXT1_SELECTOR_MAPPIN
 
 /*
  * Note: the original code has two very similar functions to generate the 5- and
- * 6-bit tables, so in the design process this was also optimised into a
- * template function instead.
+ * 6-bit tables, so in the design process this was rewritten as a template
+ * function instead.
  *
  * TODO: hmm, something's not right, ARM can get to 59ms with just the colour table, so why is this only reaching 41ms
  * TODO: removing the table and calculating per loop means the Neon SIMD implementation is slower than scalar with a table (86ms)
  */
 template<unsigned Bits>
-static void create_etc1_to_dxt1_6_conversion_table() {
+static void create_etc1_to_dxt1_conversion_table_simd() {
 	etc1_to_dxt1_56_solution* dst = result;
 	/*
 	 * Easy first choice: Pre-calculate the endpoint colours. There are 4096
@@ -199,9 +199,9 @@ static void create_etc1_to_dxt1_6_conversion_table() {
 								best_hi = hi;
 								/*
 								 * If we take an early-out here once we've hit
-								 * zero some implementations will get worse,
-								 * some better. Arm improves 20%, Intel gets
-								 * worse by 10%.
+								 * zero then some compiler/CPU combinations will
+								 * get worse, some better. ARM improves 20%,
+								 * Intel degrades by 10%.
 								 */
 								if (best_err == 0) {
 									goto outer;
@@ -213,6 +213,77 @@ static void create_etc1_to_dxt1_6_conversion_table() {
 				outer:
 					assert(best_err <= 0xFFFF);
 					*dst++ = (etc1_to_dxt1_56_solution) { (uint8_t) best_lo, (uint8_t) best_hi, (uint16_t) best_err };
+				} // m
+			} // sr
+		} // g
+	} // inten
+}
+
+/**
+ * This takes the table from the SIMD example but keeps the remainder of the
+ * code the same (so we can see the difference).
+ */
+template<unsigned Bits>
+static void create_etc1_to_dxt1_conversion_table_precalc() {
+	etc1_to_dxt1_56_solution* dst = result;
+	/*
+	 * See create_etc1_to_dxt1_conversion_table_simd()
+	 */
+	uint32_t colorTable[(1 << Bits) * (1 << Bits)][4];
+	uint32_t (*nextFour)[4] = colorTable;
+	for (uint32_t hi = 0; hi < (1 << Bits); hi++) {
+		uint32_t hi8 = (hi << (8 - Bits)) | (hi >> (Bits - (8 - Bits)));
+		for (uint32_t lo = 0; lo < (1 << Bits); lo++) {
+			int32_t lo8 = (lo << (8 - Bits)) | (lo >> (Bits - (8 - Bits)));
+			(*nextFour)[0] = lo8;
+			(*nextFour)[1] = (lo8 * 2 + hi8) / 3;
+			(*nextFour)[2] = (hi8 * 2 + lo8) / 3;
+			(*nextFour)[3] = hi8;
+			nextFour++;
+		}
+	}
+	/*
+	 * The rest is unchanged (apart from grabbing the precalculated colour and
+	 * taking the early-out).
+	 */
+	for (int inten = 0; inten < 8; inten++) {
+		for (uint32_t g = 0; g < 32; g++) {
+			color32 block_colors[4];
+			decoder_etc_block::get_diff_subblock_colors(block_colors, decoder_etc_block::pack_color5(color32(g, g, g, 255), false), inten);
+
+			for (uint32_t sr = 0; sr < NUM_ETC1_TO_DXT1_SELECTOR_RANGES; sr++) {
+				const uint32_t low_selector = g_etc1_to_dxt1_selector_ranges[sr].m_low;
+				const uint32_t high_selector = g_etc1_to_dxt1_selector_ranges[sr].m_high;
+
+				for (uint32_t m = 0; m < NUM_ETC1_TO_DXT1_SELECTOR_MAPPINGS; m++) {
+					uint32_t best_lo = 0;
+					uint32_t best_hi = 0;
+					uint32_t best_err = UINT32_MAX;
+					nextFour = colorTable;
+					for (uint32_t hi = 0; hi < (1 << Bits); hi++) {
+						for (uint32_t lo = 0; lo < (1 << Bits); lo++) {
+							uint32_t total_err = 0;
+
+							for (uint32_t s = low_selector; s <= high_selector; s++) {
+								int err = block_colors[s].g - (*nextFour)[g_etc1_to_dxt1_selector_mappings[m][s]];
+
+								total_err += err * err;
+							}
+
+							if (total_err < best_err) {
+								best_err = total_err;
+								best_lo = lo;
+								best_hi = hi;
+								if (best_err == 0) {
+									goto outer;
+								}
+							}
+							nextFour++;
+						}
+					}
+				outer:
+					assert(best_err <= 0xFFFF);
+					*dst++ = (etc1_to_dxt1_56_solution){ (uint8_t)best_lo, (uint8_t)best_hi, (uint16_t)best_err };
 				} // m
 			} // sr
 		} // g
@@ -303,8 +374,9 @@ static void bestRun(timed func, const char* name) {
 }
 
 void runTests() {
-	bestRun(create_etc1_to_dxt1_6_conversion_table_original, "original");
-	bestRun(create_etc1_to_dxt1_6_conversion_table<6>,       "optimised");
+	bestRun(create_etc1_to_dxt1_6_conversion_table_original, "Original");
+	bestRun(create_etc1_to_dxt1_conversion_table_simd<6>,    "SIMD optimised");
+	bestRun(create_etc1_to_dxt1_conversion_table_precalc<6>, "Precalc");
 }
 
 ADD_SIMD_TARGET
