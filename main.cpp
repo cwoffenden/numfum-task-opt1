@@ -61,6 +61,17 @@ static bool verifyTable(const etc1_to_dxt1_56_solution* a, const etc1_to_dxt1_56
  */
 static etc1_to_dxt1_56_solution result[32 * 8 * NUM_ETC1_TO_DXT1_SELECTOR_MAPPINGS * NUM_ETC1_TO_DXT1_SELECTOR_RANGES];
 
+// Helper to assign an array[4] as a compound literal
+struct Vec4 {
+	uint32_t a;
+	uint32_t b;
+	uint32_t c;
+	uint32_t d;
+};
+
+// Helper to access a Vec4 as an array
+typedef uint32_t Vec4Int[4];
+
 /*
  * Note: the original code has two very similar functions to generate the 5- and
  * 6-bit tables, so in the design process this was rewritten as a template
@@ -81,17 +92,13 @@ static void create_etc1_to_dxt1_conversion_table_simd() {
 	 * 
 	 * TODO: aligned malloc this, instead of putting 16kB on the stack (so vec_malloc(), _mm_malloc(), _aligned_malloc(), aligned_alloc(), posix_memalign(), etc.)
 	 */
-	ALIGNED_VAR(uint32_t, 16) colorTable[(1 << Bits) * (1 << Bits)][4];
-	uint32_t (*nextFour)[4] = colorTable;
+	ALIGNED_VAR(Vec4, 16) colorTable[(1 << Bits) * (1 << Bits)];
+	Vec4* nextVec4 = colorTable;
 	for (uint32_t hi = 0; hi < (1 << Bits); hi++) {
 		uint32_t hi8 = (hi << (8 - Bits)) | (hi >> (Bits - (8 - Bits)));
 		for (uint32_t lo = 0; lo < (1 << Bits); lo++) {
-			int32_t lo8 = (lo << (8 - Bits)) | (lo >> (Bits - (8 - Bits)));
-			(*nextFour)[0] =  lo8;
-			(*nextFour)[1] = (lo8 * 2 + hi8) / 3;
-			(*nextFour)[2] = (hi8 * 2 + lo8) / 3;
-			(*nextFour)[3] =  hi8;
-			nextFour++;
+			uint32_t lo8 = (lo << (8 - Bits)) | (lo >> (Bits - (8 - Bits)));
+			*nextVec4++ = (Vec4) {lo8, (lo8 * 2 + hi8) / 3, (hi8 * 2 + lo8) / 3, hi8};
 		}
 	}
 	/*
@@ -100,15 +107,15 @@ static void create_etc1_to_dxt1_conversion_table_simd() {
 	 * real improvement (since we remove a bunch of loops and reads) but since
 	 * we're changing how this is done we might as well cache the results.
 	 */
-	ALIGNED_VAR(uint32_t, 16) rangeTable[NUM_ETC1_TO_DXT1_SELECTOR_RANGES][4] = {};
-	nextFour = rangeTable;
+	ALIGNED_VAR(Vec4Int, 16) rangeTable[NUM_ETC1_TO_DXT1_SELECTOR_RANGES] = {};
+	Vec4Int* nextInt4 = rangeTable;
 	for (uint32_t sr = 0; sr < NUM_ETC1_TO_DXT1_SELECTOR_RANGES; sr++) {
 		const uint32_t low_selector  = g_etc1_to_dxt1_selector_ranges[sr].m_low;
 		const uint32_t high_selector = g_etc1_to_dxt1_selector_ranges[sr].m_high;
 		for (uint32_t s = low_selector; s <= high_selector; s++) {
-			(*nextFour)[s] = 0xFFFFFFFF;
+			(*nextInt4)[s] = 0xFFFFFFFF;
 		}
-		nextFour++;
+		nextInt4++;
 	}
 	/*
 	 * We use these shuffle values to move whole ints, more of which below,
@@ -130,15 +137,15 @@ static void create_etc1_to_dxt1_conversion_table_simd() {
 	 * entries on the selector mappings. Combined with 'rangeMask' this now
 	 * fully eliminates the very expensive colour error calculation loop.
 	 */
-	ALIGNED_VAR(uint32_t, 16) mappingTable[NUM_ETC1_TO_DXT1_SELECTOR_MAPPINGS][4];
-	nextFour = mappingTable;
+	ALIGNED_VAR(Vec4Int, 16) mappingTable[NUM_ETC1_TO_DXT1_SELECTOR_MAPPINGS];
+	nextInt4 = mappingTable;
 	for (uint32_t m = 0; m < NUM_ETC1_TO_DXT1_SELECTOR_MAPPINGS; m++) {
 		const uint8_t* selectorMapping = g_etc1_to_dxt1_selector_mappings[m];
-		(*nextFour)[0] = shuffle8[selectorMapping[0]];
-		(*nextFour)[1] = shuffle8[selectorMapping[1]];
-		(*nextFour)[2] = shuffle8[selectorMapping[2]];
-		(*nextFour)[3] = shuffle8[selectorMapping[3]];
-		nextFour++;
+		(*nextInt4)[0] = shuffle8[selectorMapping[0]];
+		(*nextInt4)[1] = shuffle8[selectorMapping[1]];
+		(*nextInt4)[2] = shuffle8[selectorMapping[2]];
+		(*nextInt4)[3] = shuffle8[selectorMapping[3]];
+		nextInt4++;
 	}
 	/*
 	 * Calculations start here. The colour table is a good start but the main
@@ -179,11 +186,11 @@ static void create_etc1_to_dxt1_conversion_table_simd() {
 					uint32_t best_lo = 0;
 					uint32_t best_hi = 0;
 					uint32_t best_err = UINT32_MAX;
-					nextFour = colorTable;
+					nextInt4 = (Vec4Int*) colorTable;
 					for (uint32_t hi = 0; hi < (1 << Bits); hi++) {
 						for (uint32_t lo = 0; lo < (1 << Bits); lo++) {
 							// get the next four precalculated interpolated entries
-							ts_int32x4 accum = ts_load_i32(nextFour);
+							ts_int32x4 accum = ts_load_i32(nextInt4);
 							// arrange the entries into g_etc1_to_dxt1_selector_mappings order
 							accum = ts_shuffle_u8(accum, mapping);
 							// calculate the (signed) error differences from the pre-masked used colours
@@ -207,12 +214,12 @@ static void create_etc1_to_dxt1_conversion_table_simd() {
 									goto outer;
 								}
 							}
-							nextFour++;
+							nextInt4++;
 						}
 					}
 				outer:
 					assert(best_err <= 0xFFFF);
-					*dst++ = (etc1_to_dxt1_56_solution) { (uint8_t) best_lo, (uint8_t) best_hi, (uint16_t) best_err };
+					*dst++ = (etc1_to_dxt1_56_solution) {(uint8_t) best_lo, (uint8_t) best_hi, (uint16_t) best_err};
 				} // m
 			} // sr
 		} // g
@@ -229,17 +236,13 @@ static void create_etc1_to_dxt1_conversion_table_precalc() {
 	/*
 	 * See create_etc1_to_dxt1_conversion_table_simd()
 	 */
-	uint32_t colorTable[(1 << Bits) * (1 << Bits)][4];
-	uint32_t (*nextFour)[4] = colorTable;
+	Vec4 colorTable[(1 << Bits) * (1 << Bits)];
+	Vec4* nextInt4 = colorTable;
 	for (uint32_t hi = 0; hi < (1 << Bits); hi++) {
 		uint32_t hi8 = (hi << (8 - Bits)) | (hi >> (Bits - (8 - Bits)));
 		for (uint32_t lo = 0; lo < (1 << Bits); lo++) {
-			int32_t lo8 = (lo << (8 - Bits)) | (lo >> (Bits - (8 - Bits)));
-			(*nextFour)[0] = lo8;
-			(*nextFour)[1] = (lo8 * 2 + hi8) / 3;
-			(*nextFour)[2] = (hi8 * 2 + lo8) / 3;
-			(*nextFour)[3] = hi8;
-			nextFour++;
+			uint32_t lo8 = (lo << (8 - Bits)) | (lo >> (Bits - (8 - Bits)));
+			*nextInt4++ = (Vec4) {lo8, (lo8 * 2 + hi8) / 3, (hi8 * 2 + lo8) / 3, hi8};
 		}
 	}
 	/*
@@ -259,13 +262,13 @@ static void create_etc1_to_dxt1_conversion_table_precalc() {
 					uint32_t best_lo = 0;
 					uint32_t best_hi = 0;
 					uint32_t best_err = UINT32_MAX;
-					nextFour = colorTable;
+					Vec4Int* nextColors = (Vec4Int*) colorTable;
 					for (uint32_t hi = 0; hi < (1 << Bits); hi++) {
 						for (uint32_t lo = 0; lo < (1 << Bits); lo++) {
 							uint32_t total_err = 0;
 
 							for (uint32_t s = low_selector; s <= high_selector; s++) {
-								int err = block_colors[s].g - (*nextFour)[g_etc1_to_dxt1_selector_mappings[m][s]];
+								int err = block_colors[s].g - (*nextColors)[g_etc1_to_dxt1_selector_mappings[m][s]];
 
 								total_err += err * err;
 							}
@@ -278,12 +281,12 @@ static void create_etc1_to_dxt1_conversion_table_precalc() {
 									goto outer;
 								}
 							}
-							nextFour++;
+							nextColors++;
 						}
 					}
 				outer:
 					assert(best_err <= 0xFFFF);
-					*dst++ = (etc1_to_dxt1_56_solution){ (uint8_t)best_lo, (uint8_t)best_hi, (uint16_t)best_err };
+					*dst++ = (etc1_to_dxt1_56_solution) {(uint8_t) best_lo, (uint8_t) best_hi, (uint16_t) best_err};
 				} // m
 			} // sr
 		} // g
@@ -338,7 +341,7 @@ static void create_etc1_to_dxt1_6_conversion_table_original() {
 
 					assert(best_err <= 0xFFFF);
 
-					result[n] = (etc1_to_dxt1_56_solution){ (uint8_t)best_lo, (uint8_t)best_hi, (uint16_t)best_err };
+					result[n] = (etc1_to_dxt1_56_solution) {(uint8_t) best_lo, (uint8_t) best_hi, (uint16_t) best_err};
 
 					n++;
 				} // m
@@ -362,7 +365,7 @@ static void bestRun(timed func, const char* name) {
 	}
 	// Now time each
 	unsigned best = UINT32_MAX;
-	for (int n = 10; n > 0; n--) {
+	for (int n = 20; n > 0; n--) {
 		unsigned time = millis();
 		func();
 		time = millis() - time;
@@ -375,8 +378,8 @@ static void bestRun(timed func, const char* name) {
 
 void runTests() {
 	bestRun(create_etc1_to_dxt1_6_conversion_table_original, "Original");
-	bestRun(create_etc1_to_dxt1_conversion_table_simd<6>,    "SIMD optimised");
 	bestRun(create_etc1_to_dxt1_conversion_table_precalc<6>, "Precalc");
+	bestRun(create_etc1_to_dxt1_conversion_table_simd<6>,    "SIMD optimised");
 }
 
 ADD_SIMD_TARGET
