@@ -207,17 +207,22 @@ static void create_etc1_to_dxt1_conversion_table_simd() {
 								/*
 								 * If we take an early-out here once we've hit
 								 * zero then some compiler/CPU combinations will
-								 * get worse, some better. ARM improves 20%,
-								 * Intel degrades by 10%.
+								 * get worse, some better. ARM Clang improves
+								 * 20%, Xeon MSVC degrades by 20%. If'ing here
+								 * is not a good solution.
 								 */
-								if (best_err == 0) {
-									goto outer;
-								}
+							#ifndef _MSC_VER
+								 if (best_err == 0) {
+								 	goto outer;
+								 }
+							#endif
 							}
 							nextInt4++;
 						}
 					}
+			#ifndef _MSC_VER
 				outer:
+			#endif
 					assert(best_err <= 0xFFFF);
 					*dst++ = (etc1_to_dxt1_56_solution) {(uint8_t) best_lo, (uint8_t) best_hi, (uint16_t) best_err};
 				} // m
