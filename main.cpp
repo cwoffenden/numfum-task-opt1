@@ -78,6 +78,13 @@ typedef uint32_t Vec4Int[4];
  *
  * TODO: hmm, something's not right, ARM can get to 59ms with just the colour table, so why is this only reaching 41ms
  * TODO: removing the table and calculating per loop means the Neon SIMD implementation is slower than scalar with a table (86ms)
+ *
+ * Note: Win/SSE on Mac Xeon is getting around 92ms (vs Wasm on the same machine
+ * with 112ms!) but this is slower than the earlier SSE-only experiment, the
+ * reason being is the older one used epi32 immediate shuffles unrolled, which
+ * isn't very versatile (epi8 shuffles let us programmatically define the
+ * shuffles, whereas epi32 is compile-time). 92ms is terrible compare with the
+ * 37ms on an M1 Mac!
  */
 template<unsigned Bits>
 ADD_SIMD_TARGET
