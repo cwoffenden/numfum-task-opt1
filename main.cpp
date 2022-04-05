@@ -74,13 +74,13 @@ typedef uint32_t Vec4Int[4];
 
 /*
  * Note: the original code has two very similar functions to generate the 5- and
- * 6-bit tables, so in the design process this was rewritten as a template
- * function instead.
+ * 6-bit tables, so in the design process this was rewritten as a template.
  *
  * TODO: hmm, something's not right, ARM can get to 59ms with just the colour table, so why is this only reaching 41ms
  * TODO: removing the table and calculating per loop means the Neon SIMD implementation is slower than scalar with a table (86ms)
  */
 template<unsigned Bits>
+ADD_SIMD_TARGET
 static void create_etc1_to_dxt1_conversion_table_simd() {
 	etc1_to_dxt1_56_solution* dst = result;
 	/*
@@ -264,6 +264,7 @@ static void create_etc1_to_dxt1_conversion_table_precalc() {
 				const uint32_t high_selector = g_etc1_to_dxt1_selector_ranges[sr].m_high;
 
 				for (uint32_t m = 0; m < NUM_ETC1_TO_DXT1_SELECTOR_MAPPINGS; m++) {
+					const uint8_t* mapping = g_etc1_to_dxt1_selector_mappings[m];
 					uint32_t best_lo = 0;
 					uint32_t best_hi = 0;
 					uint32_t best_err = UINT32_MAX;
@@ -273,7 +274,7 @@ static void create_etc1_to_dxt1_conversion_table_precalc() {
 							uint32_t total_err = 0;
 
 							for (uint32_t s = low_selector; s <= high_selector; s++) {
-								int err = block_colors[s].g - (*nextColors)[g_etc1_to_dxt1_selector_mappings[m][s]];
+								int err = block_colors[s].g - (*nextColors)[mapping[s]];
 
 								total_err += err * err;
 							}
