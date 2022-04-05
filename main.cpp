@@ -183,48 +183,48 @@ static void create_etc1_to_dxt1_conversion_table_simd() {
 					 * OOB will zero them out when shuffling.
 					 */
 					ts_int32x4 const mapping = ts_or_u32(ts_load_i32(mappingTable[m]), rangeMask);
-					uint32_t best_lo = 0;
-					uint32_t best_hi = 0;
+					/*
+					 * If we merge the two inner loops into one Wasm gets a nice
+					 * 20% boost, other platforms not so much. The downside is
+					 * having to calculate hi and lo from the (reverse) index.
+					 */
 					uint32_t best_err = UINT32_MAX;
+					uint32_t best_run = 0;
 					nextInt4 = (Vec4Int*) colorTable;
-					for (uint32_t hi = 0; hi < (1 << Bits); hi++) {
-						for (uint32_t lo = 0; lo < (1 << Bits); lo++) {
-							// get the next four precalculated interpolated entries
-							ts_int32x4 accum = ts_load_i32(nextInt4);
-							// arrange the entries into g_etc1_to_dxt1_selector_mappings order
-							accum = ts_shuffle_u8(accum, mapping);
-							// calculate the (signed) error differences from the pre-masked used colours
-							accum = ts_sub_i32(accum, usedColors);
-							// square the errors
-							accum = ts_mul_i32(accum, accum);
-							// sum all the errors (recalling we've already masked out unused entries)
-							uint32_t total_err = ts_hadd_i32(accum);
-							// TODO: hint that this is the branch least taken
-							if (total_err < best_err) {
-								best_err = total_err;
-								best_lo = lo;
-								best_hi = hi;
-								/*
-								 * If we take an early-out here once we've hit
-								 * zero then some compiler/CPU combinations will
-								 * get worse, some better. ARM Clang improves
-								 * 20%, Xeon MSVC degrades by 20%. If'ing here
-								 * is not a good solution.
-								 */
-							#ifndef _MSC_VER
-								 if (best_err == 0) {
-								 	goto outer;
-								 }
-							#endif
-							}
-							nextInt4++;
+					for (uint32_t n = 1 << (Bits + Bits); n > 0 ; n--) {
+						// get the next four precalculated interpolated entries
+						ts_int32x4 accum = ts_load_i32(nextInt4++);
+						// arrange the entries into g_etc1_to_dxt1_selector_mappings order
+						accum = ts_shuffle_u8(accum, mapping);
+						// calculate the (signed) error differences from the pre-masked used colours
+						accum = ts_sub_i32(accum, usedColors);
+						// square the errors
+						accum = ts_mul_i32(accum, accum);
+						// sum all the errors (recalling we've already masked out unused entries)
+						uint32_t total_err = ts_hadd_i32(accum);
+						// TODO: hint that this is the branch least taken
+						if (total_err < best_err) {
+							best_err = total_err;
+							best_run = n;
+							/*
+							 * If we take an early-out here once we've hit zero
+							 * then some compiler/CPU combinations will get
+							 * worse, some better. MSVC/Xeon can lose up to 20%
+							 * (though with a merged loop it's about the same),
+							 * whereas Clang/ARM sees a 20 improvement, and Wasm
+							 * can almost double.
+							 */
+							 if (best_err == 0) {
+							 	goto outer;
+							 }
 						}
 					}
-			#ifndef _MSC_VER
 				outer:
-			#endif
-					assert(best_err <= 0xFFFF);
-					*dst++ = (etc1_to_dxt1_56_solution) {(uint8_t) best_lo, (uint8_t) best_hi, (uint16_t) best_err};
+					uint32_t runIdx = (1 << (Bits + Bits)) - best_run;
+					*dst++ = (etc1_to_dxt1_56_solution) {
+						(uint8_t) (runIdx & ((1 << Bits) - 1)),
+						(uint8_t) (runIdx >> Bits),
+						(uint16_t) best_err};
 				} // m
 			} // sr
 		} // g
