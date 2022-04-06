@@ -129,6 +129,10 @@ typedef uint32_t Vec4Int[4];
  * isn't very versatile (epi8 shuffles let us programmatically define the
  * shuffles, whereas epi32 is compile-time). 92ms is terrible compared with the
  * 34ms on an M1 Mac!
+ *
+ * Note: creating a PGO build (on Mac ARM) interestingly sees a 50% speedup for
+ * the original scalar code, no improvement to the scalar with table, and a few
+ * percent degradation to the SIMD version.
  */
 template<unsigned Bits>
 ADD_SIMD_TARGET
