@@ -3,6 +3,17 @@
 #include <altivec.h>
 
 /*
+ * This is an odd one: when the VSX/AltiVec calls aren't internally defined by
+ * the compiler (and altivec.h isn't needed) these definitions are then added,
+ * so we need to undefine them for normal C++ to work.
+ */
+#ifndef __APPLE_ALTIVEC__
+#undef vector
+#undef pixel
+#undef bool
+#endif
+
+/*
  * To solve: disable 'Java mode' in the Vector Status and Control Register (set
  * VSCR[NJ] = 1) and allow it to be restored afterwards. E.g. grab vec_mfvscr(),
  * save it for restoring later, set the NJ bit, then update with vec_mtvscr().

@@ -14,7 +14,7 @@
 // limitations under the License.
 
 #include <cassert>
-#include <cstdint>
+#include <stdint.h>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
