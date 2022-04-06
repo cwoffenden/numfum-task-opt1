@@ -186,6 +186,14 @@ static void create_etc1_to_dxt1_conversion_table_simd() {
 		0x0B0A0908, // 11, 10,  9,  8
 		0x0F0E0D0C, // 15, 14, 13, 12
 		0xFFFFFFFF, // -1, -1, -1, -1
+		/*
+		 * Big endian needs:
+		0x00010203,
+		0x04050607,
+		0x08090A0B,
+		0x0C0D0E0F,
+		0xFFFFFFFF,
+		 */
 	};
 	/*
 	 * With the above shuffles we create another table to move colour table

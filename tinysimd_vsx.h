@@ -21,7 +21,7 @@ typedef __vector int ts_int32x4;
 
  // load/store
 
-#define ts_load_i32(addr) vec_ld(0, (const int32_t*) addr)
+#define ts_load_i32(addr) (ts_int32x4) vec_ld(0, (const int32_t*) addr)
 
 #define ts_init_i32(a, b, c, d) (ts_int32x4) {(int32_t) a, (int32_t) b, (int32_t) c, (int32_t) d}
 
@@ -39,6 +39,7 @@ static inline int32_t ts_lane_u32(ts_int32x4 v, unsigned n) {
 
 #define ts_sub_i32(a, b) vec_sub(a, b)
 
+// Older GCC is failing here, vec_mul isn't defined, but (a * b) works (investigate)
 #define ts_mul_i32(a, b) vec_mul(a, b)
 
 static inline int32_t ts_hadd_i32(ts_int32x4 val) {
