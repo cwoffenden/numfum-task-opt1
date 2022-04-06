@@ -26,6 +26,51 @@
 #include "tinysimd.h"
 
 /**
+ * \def __has_builtin
+ * Dummy \c __has_builtin implementation for when not using Clang (in which case
+ * all requested builtins are reported as unimplemented).
+ *
+ * \param builtin compiler builtin to query
+ */
+#ifndef __has_builtin
+#define __has_builtin(builtin) 0
+#endif
+
+/**
+ * \def __builtin_expect
+ * Optimiser hint for branch prediction. Supported by GCC and LLVM for \c if and
+ * \c switch statements, allowing flagging of the most common result for the \e
+ * conditional or \e control expression:
+ * \code
+ *	for (int n = 0; n < 2000; n++) {
+ *		if (__builtin_expect(n == 1000, false)) {
+ *			printf("Found it!");
+ *		}
+ *	}
+ * \endcode
+ * In the above, the compiler could optimise the branch for the case where the
+ * expression is usually false.
+ *
+ * \note C++20 standardised on \c [[likely]] and \c [[unlikely]] instead, so
+ * complicate matters if we want to support both syntaxes; using the example
+ * above:
+ * \code
+ *	if (__builtin_expect(n == 1000, false)) [[unlikely]] {
+ *		printf("Found it!");
+ *	}
+ * \endcode
+ *
+ * \param exp condition expression
+ * \param val expected value (should be a constant)
+ * \return the value of \a exp
+ */
+#ifndef __builtin_expect
+#if !__has_builtin(__builtin_expect)
+#define __builtin_expect(exp, val) (exp)
+#endif
+#endif
+
+/**
  * Helper to return the current time in milliseconds.
  */
 static unsigned millis() {
@@ -76,15 +121,14 @@ typedef uint32_t Vec4Int[4];
  * Note: the original code has two very similar functions to generate the 5- and
  * 6-bit tables, so in the design process this was rewritten as a template.
  *
- * TODO: hmm, something's not right, ARM can get to 59ms with just the colour table, so why is this only reaching 41ms
- * TODO: removing the table and calculating per loop means the Neon SIMD implementation is slower than scalar with a table (86ms)
+ * TODO: hmm, removing the table and calculating per loop means the Neon SIMD implementation is slower than scalar with a table (86ms)
  *
  * Note: Win/SSE on Mac Xeon is getting around 92ms (vs Wasm on the same machine
  * with 112ms!) but this is slower than the earlier SSE-only experiment, the
  * reason being is the older one used epi32 immediate shuffles unrolled, which
  * isn't very versatile (epi8 shuffles let us programmatically define the
- * shuffles, whereas epi32 is compile-time). 92ms is terrible compare with the
- * 37ms on an M1 Mac!
+ * shuffles, whereas epi32 is compile-time). 92ms is terrible compared with the
+ * 34ms on an M1 Mac!
  */
 template<unsigned Bits>
 ADD_SIMD_TARGET
@@ -209,8 +253,8 @@ static void create_etc1_to_dxt1_conversion_table_simd() {
 						accum = ts_mul_i32(accum, accum);
 						// sum all the errors (recalling we've already masked out unused entries)
 						uint32_t total_err = ts_hadd_i32(accum);
-						// TODO: hint that this is the branch least taken
-						if (total_err < best_err) {
+						// hint (if supported) that this is the branch least taken (+10% on Mac ARM)
+						if (__builtin_expect(total_err < best_err, false)) {
 							best_err = total_err;
 							best_run = n;
 							/*
@@ -218,8 +262,8 @@ static void create_etc1_to_dxt1_conversion_table_simd() {
 							 * then some compiler/CPU combinations will get
 							 * worse, some better. MSVC/Xeon can lose up to 20%
 							 * (though with a merged loop it's about the same),
-							 * whereas Clang/ARM sees a 20 improvement, and Wasm
-							 * can almost double.
+							 * whereas Clang/ARM sees a 20% improvement, and
+							 * Wasm can almost double.
 							 */
 							 if (best_err == 0) {
 							 	goto outer;
