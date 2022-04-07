@@ -90,7 +90,8 @@ static const etc1_to_dxt1_56_solution known[32 * 8 * NUM_ETC1_TO_DXT1_SELECTOR_M
 static bool verifyTable(const etc1_to_dxt1_56_solution* a, const etc1_to_dxt1_56_solution* b) {
 	for (unsigned n = 0; n < 32 * 8 * NUM_ETC1_TO_DXT1_SELECTOR_MAPPINGS * NUM_ETC1_TO_DXT1_SELECTOR_RANGES; n++) {
 		if (a->m_hi != b->m_hi || a->m_lo != b->m_lo || a->m_err != b->m_err) {
-			printf("Failed with n = %d\n", n);
+			printf("Failed with n = %d (hi %d/%d, lo %d/%d, err %d/%d)\n",
+				n, a->m_hi, b->m_hi, a->m_lo, b->m_lo, a->m_err, b->m_err);
 			return false;
 		}
 		a++;
