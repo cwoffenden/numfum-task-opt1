@@ -52,8 +52,8 @@ static inline int32_t ts_lane_u32(ts_int32x4 v, unsigned n) {
 
 // Older GCC is failing here, vec_mul isn't defined, but (a * b) works (investigate)
 // Investigated: it's missing because it's emulated; newer compilers add the call but it's not supported in hardware
-// Result: the performance hit of (no doubt) scalar code is what kills performance
-#define ts_mul_i32(a, b) vec_mul(a, b)
+// Fix: change to vec_mulo or vec_mule (depends on the Endianness) and limit to 16-bit inputs
+#define ts_mul_i32(a, b) vec_mulo((__vector short) a, (__vector short) b)
 
 static inline int32_t ts_hadd_i32(ts_int32x4 val) {
 	/*
