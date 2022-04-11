@@ -343,7 +343,7 @@ static void create_etc1_to_dxt1_conversion_table_precalc() {
 								total_err += err * err;
 							}
 
-							if (total_err < best_err) {
+							if (__builtin_expect(total_err < best_err, false)) {
 								best_err = total_err;
 								best_lo = lo;
 								best_hi = hi;
@@ -459,6 +459,10 @@ void printInt32x4(ts_int32x4 v) {
 		ts_lane_u32(v, 1),
 		ts_lane_u32(v, 2),
 		ts_lane_u32(v, 3));
+	/*
+	 * Hmm, GCC 10 is flagging 'v' as not used above.
+	 */
+	(void) v;
 }
 
 void printInt(int i) {
