@@ -36,13 +36,7 @@ typedef __vector int ts_int32x4;
 
 #define ts_init_i32(a, b, c, d) (ts_int32x4) {(int32_t) a, (int32_t) b, (int32_t) c, (int32_t) d}
 
-static inline int32_t ts_lane_u32(ts_int32x4 v, unsigned n) {
-	union {
-		ts_int32x4 v;
-		int32_t i[4];
-	} vec = {v};
-	return vec.i[n];
-}
+#define ts_lane_u32(v, n) vec_extract(v, n)
 
 // arithmetic
 
@@ -60,7 +54,7 @@ static inline int32_t ts_hadd_i32(ts_int32x4 val) {
 	 * This is six instructions, but on Power8 at least the lane extract is a
 	 * 'mfvsrwz' vector to scalar register, rather than to memory.
 	 */
-	return ts_lane_u32(vec_sums(val, vec_splat_s32(0)), 3);
+	return vec_extract(vec_sums(val, vec_splat_s32(0)), 3);
 }
 
 // logical
