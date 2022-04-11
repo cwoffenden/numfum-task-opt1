@@ -295,6 +295,38 @@ static void create_etc1_to_dxt1_conversion_table_simd() {
 	} // inten
 }
 
+// Test for generating a colour table with stride
+template<unsigned Bits, unsigned Width>
+void create_etc1_to_dxt1_6_conversion_table_wide() {
+	ALIGNED_VAR(int32_t, 16) colorTable[(1 << Bits) * (1 << Bits) * 4];
+	int32_t* next = colorTable;
+	for (uint32_t hi = 0; hi < (1 << Bits); hi++) {
+		uint32_t hiExp8 = (hi << (8 - Bits)) | (hi >> (Bits - (8 - Bits)));
+		for (uint32_t lo = 0; lo < (1 << Bits); lo += Width) {
+			for (uint32_t n = Width, loStep = lo; n > 0; n--, loStep++) {
+				uint32_t loExp8 = (loStep << (8 - Bits)) | (loStep >> (Bits - (8 - Bits)));
+				next[Width * 0] =  loExp8;
+				next[Width * 1] = (loExp8 * 2 + hiExp8) / 3;
+				next[Width * 2] = (hiExp8 * 2 + loExp8) / 3;
+				next[Width * 3] =  hiExp8;
+				next++;
+			}
+			next += Width * 3;
+		}
+	}
+	next = colorTable;
+	for (int n = 0; n < 8; n++) {
+		printf("%02d: ", n);
+		for (unsigned i = 0; i < Width; i++) {
+			printf("%08X", *next++);
+			if (i < Width - 1) {
+				printf(", ");
+			}
+		}
+		printf("\n");
+	}
+}
+
 /**
  * This takes the table from the SIMD example but keeps the remainder of the
  * code the same (so we can see the difference).
@@ -429,6 +461,7 @@ typedef void (*timed) ();
  */
 static void bestRun(timed func, const char* name) {
 	// Before we time it we verify the results are correct
+	memset(result, 0, sizeof result);
 	func();
 	if (!verifyTable(result, known)) {
 		printf("Generated results don't match known values\n");
