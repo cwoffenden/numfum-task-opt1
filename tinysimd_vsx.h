@@ -44,7 +44,7 @@ typedef __vector int ts_int32x4;
 
 #define ts_sub_i32(a, b) vec_sub(a, b)
 
-#if __BYTE_ORDER == __LITTLE_ENDIAN
+#if !defined(__BYTE_ORDER) || (__BYTE_ORDER == __LITTLE_ENDIAN)
 #define ts_mul_i32(a, b) vec_mule((__vector short) a, (__vector short) b)
 #else
 #define ts_mul_i32(a, b) vec_mulo((__vector short) a, (__vector short) b)

@@ -182,19 +182,18 @@ static void create_etc1_to_dxt1_conversion_table_simd() {
 	 * switch).
 	 */
 	uint32_t const shuffle8[5] = {
+	#if !defined(__BYTE_ORDER) || (__BYTE_ORDER == __LITTLE_ENDIAN)
 		0x03020100, //  3,  2,  1,  0
 		0x07060504, //  7,  6,  5,  4
 		0x0B0A0908, // 11, 10,  9,  8
 		0x0F0E0D0C, // 15, 14, 13, 12
-		0xFFFFFFFF, // -1, -1, -1, -1
-		/*
-		 * Big endian needs:
+	#else
 		0x00010203,
 		0x04050607,
 		0x08090A0B,
 		0x0C0D0E0F,
-		0xFFFFFFFF,
-		 */
+	#endif
+		0xFFFFFFFF, // -1, -1, -1, -1
 	};
 	/*
 	 * With the above shuffles we create another table to move colour table
